@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8" />
+<title>Personal Brush Maker</title>
+<style>
+body {
+  margin: 0;
+  display: flex;
+  font-family: Arial;
+  background: #1e1e1e;
+  color: white;
+}
+
+#panel {
+  width: 300px;
+  padding: 10px;
+  background: #2a2a2a;
+  box-sizing: border-box;
+}
+
+canvas {
+  flex: 1;
+  background: #111;
+  cursor: crosshair;
+}
+
+input, button {
+  width: 100%;
+  margin: 5px 0;
+}
+</style>
+</head>
+<body>
+
+<div id="panel">
+  <h3>Brush Maker</h3>
+
+  <label>Size</label>
+  <input id="size" type="range" min="1" max="50" value="10">
+
+  <label>Opacity</label>
+  <input id="opacity" type="range" min="1" max="100" value="80">
+
+  <label>Spacing (lower = smoother)</label>
+  <input id="spacing" type="range" min="1" max="50" value="5">
+
+  <button onclick="saveBrush()">Save Brush</button>
+  <button onclick="loadBrush()">Load Brush</button>
+  <button onclick="clearCanvas()">Clear</button>
+
+  <p id="status"></p>
+</div>
+
+<canvas id="canvas"></canvas>
+
+<script>
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+
+canvas.width = window.innerWidth - 300;
+canvas.height = window.innerHeight;
+
+let drawing = false;
+let last = null;
+let brush = {
+  size: 10,
+  opacity: 0.8,
+  spacing: 5
+};
+
+// UI bindings
+function updateBrush() {
+  brush.size = +document.getElementById("size").value;
+  brush.opacity = +document.getElementById("opacity").value / 100;
+  brush.spacing = +document.getElementById("spacing").value;
+}
+
+document.querySelectorAll("input").forEach(i => {
+  i.addEventListener("input", updateBrush);
+});
+
+// distance helper
+function dist(a, b) {
+  return Math.sqrt((a.x-b.x)**2 + (a.y-b.y)**2);
+}
+
+function drawDot(x, y, pressure=1) {
+  ctx.globalAlpha = brush.opacity;
+  ctx.beginPath();
+  ctx.arc(x, y, brush.size * pressure, 0, Math.PI * 2);
+  ctx.fillStyle = "white";
+  ctx.fill();
+}
+
+canvas.addEventListener("mousedown", (e) => {
+  drawing = true;
+  last = { x: e.offsetX, y: e.offsetY };
+});
+
+canvas.addEventListener("mouseup", () => {
+  drawing = false;
+  last = null;
+});
+
+canvas.addEventListener("mousemove", (e) => {
+  if (!drawing) return;
+
+  const current = { x: e.offsetX, y: e.offsetY };
+
+  if (dist(last, current) > brush.spacing) {
+    const speed = Math.min(dist(last, current) / 10, 2);
+    drawDot(current.x, current.y, speed);
+    last = current;
+  }
+});
+
+function clearCanvas() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+}
+
+// Save brush preset
+function saveBrush() {
+  updateBrush();
+  const data = JSON.stringify(brush, null, 2);
+
+  const blob = new Blob([data], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "my_brush.json";
+  a.click();
+
+  document.getElementById("status").innerText = "Brush saved!";
+}
+
+// Load brush preset
+function loadBrush() {
+  const input = document.createElement("input");
+  input.type = "file";
+
+  input.onchange = e => {
+    const file = e.target.files[0];
+    const reader = new FileReader();
+
+    reader.onload = event => {
+      brush = JSON.parse(event.target.result);
+
+      document.getElementById("size").value = brush.size;
+      document.getElementById("opacity").value = brush.opacity * 100;
+      document.getElementById("spacing").value = brush.spacing;
+
+      document.getElementById("status").innerText = "Brush loaded!";
+    };
+
+    reader.readAsText(file);
+  };
+
+  input.click();
+}
+
+window.addEventListener("resize", () => {
+  canvas.width = window.innerWidth - 300;
+  canvas.height = window.innerHeight;
+});
+</script>
+
+</body>
+</html>
