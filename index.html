@@ -2,139 +2,248 @@
 <html>
 <head>
 <meta charset="UTF-8" />
-<title>Personal Brush Maker</title>
+<title>Brush Lab v2</title>
 <style>
 body {
   margin: 0;
-  display: flex;
   font-family: Arial;
-  background: #1e1e1e;
+  display: flex;
+  height: 100vh;
+  background: #1b1b1b;
   color: white;
 }
 
 #panel {
-  width: 300px;
-  padding: 10px;
+  width: 320px;
   background: #2a2a2a;
+  padding: 10px;
   box-sizing: border-box;
+  overflow-y: auto;
 }
 
 canvas {
-  flex: 1;
-  background: #111;
-  cursor: crosshair;
+  border: 1px solid #444;
 }
 
-input, button {
+#wrap {
+  display: flex;
+  flex: 1;
+}
+
+#left, #right {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+label {
+  font-size: 12px;
+  margin-top: 6px;
+  display: block;
+}
+
+input {
   width: 100%;
-  margin: 5px 0;
+}
+
+button {
+  width: 100%;
+  margin-top: 6px;
 }
 </style>
 </head>
+
 <body>
 
 <div id="panel">
-  <h3>Brush Maker</h3>
+  <h3>Brush Lab v2</h3>
 
   <label>Size</label>
-  <input id="size" type="range" min="1" max="50" value="10">
+  <input id="size" type="range" min="1" max="80" value="20">
 
   <label>Opacity</label>
   <input id="opacity" type="range" min="1" max="100" value="80">
 
-  <label>Spacing (lower = smoother)</label>
-  <input id="spacing" type="range" min="1" max="50" value="5">
+  <label>Flow</label>
+  <input id="flow" type="range" min="1" max="100" value="50">
+
+  <label>Spacing</label>
+  <input id="spacing" type="range" min="1" max="50" value="10">
+
+  <label>Scatter</label>
+  <input id="scatter" type="range" min="0" max="30" value="5">
+
+  <label>Angle Jitter</label>
+  <input id="angle" type="range" min="0" max="180" value="0">
+
+  <label>Texture Strength</label>
+  <input id="texStrength" type="range" min="0" max="100" value="50">
+
+  <label>Hardness</label>
+  <input id="hardness" type="range" min="1" max="100" value="80">
 
   <button onclick="saveBrush()">Save Brush</button>
   <button onclick="loadBrush()">Load Brush</button>
-  <button onclick="clearCanvas()">Clear</button>
-
-  <p id="status"></p>
+  <button onclick="clearPreview()">Clear Preview</button>
 </div>
 
-<canvas id="canvas"></canvas>
+<div id="wrap">
+  <div id="left">
+    <h4>Texture Painter</h4>
+    <canvas id="texCanvas" width="250" height="250"></canvas>
+    <button onclick="clearTexture()">Clear Texture</button>
+  </div>
+
+  <div id="right">
+    <h4>Preview</h4>
+    <canvas id="preview" width="600" height="500"></canvas>
+  </div>
+</div>
 
 <script>
-const canvas = document.getElementById("canvas");
-const ctx = canvas.getContext("2d");
+const texCanvas = document.getElementById("texCanvas");
+const tctx = texCanvas.getContext("2d");
 
-canvas.width = window.innerWidth - 300;
-canvas.height = window.innerHeight;
+const preview = document.getElementById("preview");
+const ctx = preview.getContext("2d");
 
-let drawing = false;
+let drawingTex = false;
+let drawingPreview = false;
 let last = null;
+
 let brush = {
-  size: 10,
+  size: 20,
   opacity: 0.8,
-  spacing: 5
+  flow: 0.5,
+  spacing: 10,
+  scatter: 5,
+  angle: 0,
+  texStrength: 0.5,
+  hardness: 0.8
 };
 
-// UI bindings
+// UI update
 function updateBrush() {
-  brush.size = +document.getElementById("size").value;
-  brush.opacity = +document.getElementById("opacity").value / 100;
-  brush.spacing = +document.getElementById("spacing").value;
+  brush.size = +size.value;
+  brush.opacity = +opacity.value / 100;
+  brush.flow = +flow.value / 100;
+  brush.spacing = +spacing.value;
+  brush.scatter = +scatter.value;
+  brush.angle = +angle.value;
+  brush.texStrength = +texStrength.value / 100;
+  brush.hardness = +hardness.value / 100;
 }
 
-document.querySelectorAll("input").forEach(i => {
-  i.addEventListener("input", updateBrush);
+document.querySelectorAll("input").forEach(i =>
+  i.addEventListener("input", updateBrush)
+);
+
+// ===== TEXTURE PAINTER =====
+texCanvas.addEventListener("mousedown", e => {
+  drawingTex = true;
+  tctx.beginPath();
 });
 
-// distance helper
-function dist(a, b) {
-  return Math.sqrt((a.x-b.x)**2 + (a.y-b.y)**2);
+texCanvas.addEventListener("mouseup", () => drawingTex = false);
+
+texCanvas.addEventListener("mousemove", e => {
+  if (!drawingTex) return;
+
+  tctx.fillStyle = "white";
+  tctx.strokeStyle = "white";
+  tctx.lineWidth = 10;
+  tctx.lineCap = "round";
+
+  tctx.lineTo(e.offsetX, e.offsetY);
+  tctx.stroke();
+  tctx.beginPath();
+  tctx.moveTo(e.offsetX, e.offsetY);
+});
+
+// ===== PREVIEW BRUSH =====
+function dist(a,b){
+  return Math.hypot(a.x-b.x, a.y-b.y);
 }
 
-function drawDot(x, y, pressure=1) {
-  ctx.globalAlpha = brush.opacity;
+function drawBrush(x,y,pressure=1,angle=0){
+  const size = brush.size * pressure;
+
+  const offX = (Math.random()-0.5) * brush.scatter;
+  const offY = (Math.random()-0.5) * brush.scatter;
+
+  const alpha = brush.opacity * brush.flow;
+
+  ctx.save();
+  ctx.translate(x+offX, y+offY);
+  ctx.rotate(angle);
+
+  // softness simulation
+  const gradient = ctx.createRadialGradient(0,0,0,0,0,size);
+  gradient.addColorStop(0, `rgba(255,255,255,${alpha})`);
+  gradient.addColorStop(1, `rgba(255,255,255,0)`);
+
+  ctx.fillStyle = gradient;
+
   ctx.beginPath();
-  ctx.arc(x, y, brush.size * pressure, 0, Math.PI * 2);
-  ctx.fillStyle = "white";
+  ctx.arc(0,0,size,0,Math.PI*2);
   ctx.fill();
+
+  ctx.restore();
 }
 
-canvas.addEventListener("mousedown", (e) => {
-  drawing = true;
-  last = { x: e.offsetX, y: e.offsetY };
+preview.addEventListener("mousedown", e => {
+  drawingPreview = true;
+  last = {x:e.offsetX,y:e.offsetY};
 });
 
-canvas.addEventListener("mouseup", () => {
-  drawing = false;
+preview.addEventListener("mouseup", () => {
+  drawingPreview = false;
   last = null;
 });
 
-canvas.addEventListener("mousemove", (e) => {
-  if (!drawing) return;
+preview.addEventListener("mousemove", e => {
+  if (!drawingPreview) return;
 
-  const current = { x: e.offsetX, y: e.offsetY };
+  const cur = {x:e.offsetX,y:e.offsetY};
+  const d = dist(last, cur);
 
-  if (dist(last, current) > brush.spacing) {
-    const speed = Math.min(dist(last, current) / 10, 2);
-    drawDot(current.x, current.y, speed);
-    last = current;
+  if (d > brush.spacing) {
+    const pressure = Math.min(d/10, 2);
+
+    const angle = brush.angle * (Math.PI/180);
+
+    drawBrush(cur.x, cur.y, pressure, angle);
+    last = cur;
   }
 });
 
-function clearCanvas() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+function clearPreview(){
+  ctx.clearRect(0,0,preview.width,preview.height);
 }
 
-// Save brush preset
-function saveBrush() {
-  updateBrush();
-  const data = JSON.stringify(brush, null, 2);
+function clearTexture(){
+  tctx.clearRect(0,0,texCanvas.width,texCanvas.height);
+}
 
-  const blob = new Blob([data], { type: "application/json" });
+// ===== SAVE / LOAD =====
+function saveBrush(){
+  const texture = texCanvas.toDataURL();
+
+  const data = {
+    ...brush,
+    texture
+  };
+
+  const blob = new Blob([JSON.stringify(data,null,2)], {type:"application/json"});
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = "my_brush.json";
+  a.download = "brush.json";
   a.click();
-
-  document.getElementById("status").innerText = "Brush saved!";
 }
 
-// Load brush preset
-function loadBrush() {
+function loadBrush(){
   const input = document.createElement("input");
   input.type = "file";
 
@@ -142,14 +251,25 @@ function loadBrush() {
     const file = e.target.files[0];
     const reader = new FileReader();
 
-    reader.onload = event => {
-      brush = JSON.parse(event.target.result);
+    reader.onload = ev => {
+      const data = JSON.parse(ev.target.result);
+      brush = data;
 
-      document.getElementById("size").value = brush.size;
-      document.getElementById("opacity").value = brush.opacity * 100;
-      document.getElementById("spacing").value = brush.spacing;
+      size.value = brush.size;
+      opacity.value = brush.opacity * 100;
+      flow.value = brush.flow * 100;
+      spacing.value = brush.spacing;
+      scatter.value = brush.scatter;
+      angle.value = brush.angle;
+      texStrength.value = brush.texStrength * 100;
+      hardness.value = brush.hardness;
 
-      document.getElementById("status").innerText = "Brush loaded!";
+      const img = new Image();
+      img.onload = () => {
+        tctx.clearRect(0,0,texCanvas.width,texCanvas.height);
+        tctx.drawImage(img,0,0);
+      };
+      img.src = brush.texture;
     };
 
     reader.readAsText(file);
@@ -157,11 +277,6 @@ function loadBrush() {
 
   input.click();
 }
-
-window.addEventListener("resize", () => {
-  canvas.width = window.innerWidth - 300;
-  canvas.height = window.innerHeight;
-});
 </script>
 
 </body>
